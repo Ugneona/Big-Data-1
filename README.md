@@ -37,3 +37,23 @@ def assign_location_groups(df, distance_threshold_nm=10):
             assigned[mask] = True  # Pažymime, kad laivai jau priskirti
             group_id += 1
 
+    return df
+
+@tw.timeit
+def task_C(sub_df):
+    sub_df = sub_df.copy()
+    grouped_data = [group for _, group in sub_df.groupby('# Timestamp')] 
+    group1=grouped_data[0]
+    group2=grouped_data[1]
+
+    if len(group1) > 2:  
+        sub_df["spoofing_c"] = False
+        
+        group1 = assign_location_groups(group1)
+
+        if group1["location_group"].any() != -1:
+            for group, _ in range(len(group1["location_group"].unique()):
+                for mmsi in len(group1[group1['location_group'] == group]['MMSI'].unique()):
+                    lat0, lon0 = group1.iloc[group1['location_group' == group]]['Latitude'], group1.iloc[group1['location_group' == group]]['Longitude']
+                    lat1, lon1 = group2.iloc[group1['location_group' == group]]['Latitude'], group2.iloc[i]['Longitude']
+
