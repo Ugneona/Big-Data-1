@@ -1,28 +1,39 @@
-def task_B(sub_df):
-    sub_df = sub_df.sort_values(by='# Timestamp').copy()
+def calculate_distance_matrix(latitudes, longitudes):
+    """
+    Apskaičiuoja atstumų matricą tarp visų laivų.
+    """
+    R = 6371  # Žemės spindulys kilometrais
+    lat_rad = np.radians(latitudes)
+    lon_rad = np.radians(longitudes)
 
-    if len(sub_df) > 2:  
-        sub_df["spoofing_b"] = False
+    lat_diff = lat_rad[:, None] - lat_rad[None, :]
+    lon_diff = lon_rad[:, None] - lon_rad[None, :]
+    
+    a = np.sin(lat_diff / 2) ** 2 + np.cos(lat_rad[:, None]) * np.cos(lat_rad[None, :]) * np.sin(lon_diff / 2) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    
+    return (R * c) / 1.852  # Konvertuojame į jūrmyles
 
-        for i in range(1, len(sub_df) - 2):  
-            sog0, sog1, sog2 = sub_df.iloc[i - 1]['SOG'], sub_df.iloc[i]['SOG'], sub_df.iloc[i + 1]['SOG']
-            cog0, cog1, cog2 = sub_df.iloc[i - 1]['COG'], sub_df.iloc[i]['COG'], sub_df.iloc[i + 1]['COG']
+def assign_location_groups(df, distance_threshold_nm=10):
+    """
+    Priskiria laivams grupės numerį pagal jų artumą vienas kitam,
+    nenaudojant `combinations`.
+    """
+    df = df.copy()
+    df["location_group"] = -1  # Pradžioje visi laivai neturi grupės
+    group_id = 0
 
-            lat0, lon0 = sub_df.iloc[i - 1]['Latitude'], sub_df.iloc[i - 1]['Longitude']
-            lat1, lon1 = sub_df.iloc[i]['Latitude'], sub_df.iloc[i]['Longitude']
-            lat2, lon2 = sub_df.iloc[i + 1]['Latitude'], sub_df.iloc[i + 1]['Longitude']
+    latitudes = df["Latitude"].to_numpy()
+    longitudes = df["Longitude"].to_numpy()
 
-            if pd.notna([sog0, sog1, sog2, lat0, lon0, lat1, lon1, lat2, lon2]).all():  
-                distance_nm0 = calculate_distance(lat0, lon0, lat1, lon1) / 1.852
-                distance_nm1 = calculate_distance(lat1, lon1, lat2, lon2) / 1.852
-                time_diff0 = (sub_df.iloc[i]['# Timestamp'] - sub_df.iloc[i - 1]['# Timestamp']).total_seconds() / 60
+    distance_matrix = calculate_distance_matrix(latitudes, longitudes)  # Atstumų matrica
 
-                if time_diff0 > 0:
-                    if ((abs(sog0 - sog1) > 10 and abs(sog1 - sog2) > 10) or
-                        (abs(sog0 - sog1) > 90 and abs(sog2 - sog1) > 90) or
-                        (distance_nm0 > 10 and distance_nm1 > 10)):  
-                        sub_df.at[sub_df.index[i], 'spoofing_b'] = True
-    else:
-        sub_df["spoofing_b"] = None
+    assigned = np.full(len(df), False)  # Sekame, kurie laivai jau priskirti grupei
 
-    return sub_df
+    for i in range(len(df)):
+        if not assigned[i]:  # Jei laivas dar neturi grupės
+            mask = distance_matrix[i] < distance_threshold_nm  # Randame artimus laivus
+            df.loc[mask, "location_group"] = group_id  # Priskiriame tą pačią grupę
+            assigned[mask] = True  # Pažymime, kad laivai jau priskirti
+            group_id += 1
+
