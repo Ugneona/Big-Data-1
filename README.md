@@ -1,4 +1,22 @@
-
+ion read_data took 48.26s
+Data has 20697678 rows and 26 columns.
+taken groups: 362
+Testing with 1 workers A task
+Processing Groups:   0%|                                                                                                         | 0/362 [00:00<?, ?group/s]
+Traceback (most recent call last):
+  File "c:/Users/ukniukstaite/OneDrive - Amber Grid/Documents/bandymas/import pandas as pd.py", line 256, in <module>
+    results_a, results_b, analysis_a, analysis_b=many_workers([1, 2, 4, 7], selected_groups)
+  File "c:/Users/ukniukstaite/OneDrive - Amber Grid/Documents/bandymas/import pandas as pd.py", line 110, in many_workers
+    for result, memory_used in pool.imap(lambda df: measure_memory(task_A, df), grouped_data):
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2800.0_x64__qbz5n2kfra8p0\lib\multiprocessing\pool.py", line 868, in next       
+    raise value
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2800.0_x64__qbz5n2kfra8p0\lib\multiprocessing\pool.py", line 537, in _handle_tasks
+    put(task)
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2800.0_x64__qbz5n2kfra8p0\lib\multiprocessing\connection.py", line 206, in send 
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2800.0_x64__qbz5n2kfra8p0\lib\multiprocessing\reduction.py", line 51, in dumps  
+    cls(buf, protocol).dump(obj)
+AttributeError: Can't pickle local object 'many_workers.<locals>.<lambda>'
 def memory_usage():
     """Returns current process memory usage in MB."""
     process = psutil.Process()
