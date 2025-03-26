@@ -1,0 +1,182 @@
+import pandas as pd
+import time33 as tw
+import multiprocessing as mp
+import numpy as np
+import time
+from tqdm import tqdm
+import psutil
+
+
+
+def memory_usage():
+    """Returns current process memory usage in MB."""
+    process = psutil.Process()
+    return process.memory_info().rss / (1024 * 1024)
+
+def measure_memory(func, *args):
+    """Measures memory usage of a function."""
+    memory_before = memory_usage()
+    result = func(*args)
+    memory_after = memory_usage()
+    memory_used = memory_after - memory_before
+    return result, memory_used
+
+@tw.timeit
+def read_data(chunk_size):
+    print(f"Chunk size: {chunk_size}")
+    for chunk in pd.read_csv(filename, chunksize=chunk_size, parse_dates=['# Timestamp']):
+        chunk_list.append(chunk)
+    return pd.concat(chunk_list, ignore_index=True)
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    return R * c
+
+@tw.timeit
+def task_A(sub_df):
+    sub_df = sub_df.sort_values(by='# Timestamp').copy()
+    
+    if len(sub_df) > 1:
+        sub_df["spoofing_a"] = False
+        for i in range(1, len(sub_df)):
+            lat1, lon1 = sub_df.iloc[i - 1]['Latitude'], sub_df.iloc[i - 1]['Longitude']
+            lat2, lon2 = sub_df.iloc[i]['Latitude'], sub_df.iloc[i]['Longitude']
+            distance_km = calculate_distance(lat1, lon1, lat2, lon2)
+            distance_nm = distance_km / 1.852  
+            time_diff = (sub_df.iloc[i]['# Timestamp'] - sub_df.iloc[i - 1]['# Timestamp']).total_seconds() / 60  
+            if time_diff > 0 and (distance_nm / time_diff) > 50:  
+                sub_df.at[sub_df.index[i], 'spoofing_a'] = True
+    else:
+        sub_df["spoofing_a"] = None
+    return sub_df
+
+@tw.timeit
+def task_B(sub_df):
+    sub_df = sub_df.sort_values(by='# Timestamp').copy()
+
+    if len(sub_df) > 2:  
+        sub_df["spoofing_b"] = False
+
+        for i in range(1, len(sub_df) - 2):  
+            sog0, sog1, sog2 = sub_df.iloc[i - 1]['SOG'], sub_df.iloc[i]['SOG'], sub_df.iloc[i + 1]['SOG']
+            cog0, cog1, cog2 = sub_df.iloc[i - 1]['COG'], sub_df.iloc[i]['COG'], sub_df.iloc[i + 1]['COG']
+
+            lat0, lon0 = sub_df.iloc[i - 1]['Latitude'], sub_df.iloc[i - 1]['Longitude']
+            lat1, lon1 = sub_df.iloc[i]['Latitude'], sub_df.iloc[i]['Longitude']
+            lat2, lon2 = sub_df.iloc[i + 1]['Latitude'], sub_df.iloc[i + 1]['Longitude']
+
+           
+            distance_nm0 = calculate_distance(lat0, lon0, lat1, lon1) / 1.852
+            distance_nm1 = calculate_distance(lat1, lon1, lat2, lon2) / 1.852
+            time_diff0 = (sub_df.iloc[i]['# Timestamp'] - sub_df.iloc[i - 1]['# Timestamp']).total_seconds() / 60
+            time_diff1 = (sub_df.iloc[i+1]['# Timestamp'] - sub_df.iloc[i]['# Timestamp']).total_seconds() / 60
+
+            if time_diff0 > 0 and time_diff1 > 0:
+                    if ((abs(sog0 - sog1) > 10 and abs(sog1 - sog2) > 10) or
+                        (abs(cog0 - cog1) > 90 and abs(cog2 - cog1) > 90) or
+                        (distance_nm0 > 10 and distance_nm1 > 10)):  
+                        sub_df.at[sub_df.index[i], 'spoofing_b'] = True
+    else:
+        sub_df["spoofing_b"] = None
+
+    return sub_df
+
+def speed_up(time_seq, time_par):
+    speed_up_variable=(time_seq/time_par)
+    print(f"Speed-up was: {speed_up_variable}")
+    return speed_up_variable
+
+def process_group(args):
+    task, df=args
+    result, memory_used = measure_memory(task, df)  
+    return result, memory_used
+
+def many_workers(workers_list, grouped_data):
+    analysis_a = []
+    analysis_b = []
+
+    for worker in workers_list:
+        print(f"Testing with {worker} workers A task")
+        start = time.perf_counter()
+        cpu_before = psutil.cpu_percent(interval=None)
+
+        with mp.Pool(worker) as pool:
+            with tqdm(total=len(grouped_data), desc="Processing Groups", unit='group') as pbar:
+                results_A = []
+                memory_usage_list = []
+                for result, memory_used in pool.imap(process_group, [(task_A, df) for df in grouped_data]):
+                    results_A.append(result)
+                    memory_usage_list.append(memory_used)
+                    pbar.update(1)
+
+        end = time.perf_counter()
+        cpu_after = psutil.cpu_percent(interval=None)
+        execution_time = end - start
+        avg_cpu_usage = (cpu_before + cpu_after) / 2
+        memory_used = sum(memory_usage_list)
+
+        if worker == 1:
+            baseline_time = execution_time
+        speed=speed_up(baseline_time, execution_time)
+        analysis_a.append((worker, execution_time, avg_cpu_usage, memory_used, speed))
+        print(f"Task A, workers: {worker}, time: {execution_time}s, CPU: {avg_cpu_usage}%, Memory: {memory_used}MB, speed: {speed}")
+
+    for worker in workers_list:
+        print(f"Testing with {worker} workers B task")
+        start = time.perf_counter()
+        cpu_before = psutil.cpu_percent(interval=None)
+
+        with mp.Pool(worker) as pool:
+            with tqdm(total=len(grouped_data), desc="Processing Groups", unit='group') as pbar:
+                results_B = []
+                memory_usage_list = []
+                for result, memory_used in pool.imap(process_group, [(task_B, df) for df in grouped_data]):
+                    results_B.append(result)
+                    memory_usage_list.append(memory_used)
+                    pbar.update(1)
+
+        end = time.perf_counter()
+        cpu_after = psutil.cpu_percent(interval=None)
+        execution_time = end - start
+        avg_cpu_usage = (cpu_before + cpu_after) / 2
+        memory_used = sum(memory_usage_list)
+
+        if worker == 1:
+            baseline_time = execution_time
+        speed=speed_up(baseline_time, execution_time)
+        analysis_b.append((worker, execution_time, avg_cpu_usage, memory_used, speed))
+        print(f"Task B, workers: {worker}, time: {execution_time}s, CPU: {avg_cpu_usage}%, Memory: {memory_used}MB, speed:{speed}")
+
+    return results_A, results_B, analysis_a, analysis_b
+
+
+
+
+if __name__ == "__main__":
+    
+    filename = ' '
+    chunk_size = 10 ** 7
+    chunk_list = []
+    data = read_data(chunk_size)
+    print(f"Data has {data.shape[0]} rows and {data.shape[1]} columns.")
+    
+    grouped_data = [group for _, group in data.groupby('MMSI')]  # Skirstome duomenis pagal MMSI
+    num_groups_to_take = max(1, int(len(grouped_data) * 0.05)) 
+    print(f"taken groups: {num_groups_to_take}")
+
+    selected_groups = grouped_data[:num_groups_to_take]
+    results_a, results_b, analysis_a, analysis_b=many_workers([1, 2, 4, 7], selected_groups)
+    print("task A")
+    print("worker count | execution time (s), avg cpu usage (%) | memory used (MB)")
+    for worker, time_taken, cpu_usage, memory, speed_up in results_a:
+        print(f"{worker:<12} | {time_taken:<18} | {cpu_usage:<17} | {memory:<13}")
+
+    print("task B")
+    print("worker count | execution time (s), avg cpu usage (%) | memory used (MB)")
+    for worker, time_taken, cpu_usage, memory, speed_up in results_b:
+        print(f"{worker:<12} | {time_taken:<18} | {cpu_usage:<17} | {memory:<13}")
