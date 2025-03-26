@@ -85,27 +85,27 @@ if __name__ == "__main__":
 
     # **Sekvencinis vykdymas**
     start = time.perf_counter()
-    result_a = [task_A(group) for group in grouped_data[:5]]
+    result_a = [task_A(group) for group in grouped_data[:7]]
     end = time.perf_counter()
     print(f"Sequential execution time for task A: {end - start:.2f} seconds")
 
     # **Paralelinis vykdymas**
     start = time.perf_counter()
     with mp.Pool(mp.cpu_count()-1) as pool:
-        results_a_parallel = pool.map(task_A, grouped_data[:5]) \
+        results_a_parallel = pool.map(task_A, grouped_data[:7]) \
     end = time.perf_counter()
     print(f"Parallel execution time for task A: {end - start:.2f} seconds")
 
 
     # **Sekvencinis vykdymas**
     start = time.perf_counter()
-    result_b = [task_B(group) for group in grouped_data[:5]] #norint visiems laivams (MMSI) reiketu vietoj grouped_data[:5] naudoti grouped_data
+    result_b = [task_B(group) for group in grouped_data[:7]] #norint visiems laivams (MMSI) reiketu vietoj grouped_data[:7] naudoti grouped_data
     end = time.perf_counter()
     print(f"Sequential execution time for task B: {end - start:.2f} seconds")
 
     # **Paralelinis vykdymas**
     start = time.perf_counter()
     with mp.Pool(mp.cpu_count()-1) as pool:
-        results_a_parallel = pool.map(task_B, grouped_data[:5]) 
+        results_a_parallel = pool.map(task_B, grouped_data[:7]) 
     end = time.perf_counter()
     print(f"Parallel execution time for task B: {end - start:.2f} seconds")
