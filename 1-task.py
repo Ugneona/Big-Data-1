@@ -92,7 +92,7 @@ if __name__ == "__main__":
     # **Paralelinis vykdymas**
     start = time.perf_counter()
     with mp.Pool(mp.cpu_count()-1) as pool:
-        results_a_parallel = pool.map(task_A, grouped_data[:7]) \
+        results_a_parallel = pool.map(task_A, grouped_data[:7]) 
     end = time.perf_counter()
     print(f"Parallel execution time for task A: {end - start:.2f} seconds")
 
